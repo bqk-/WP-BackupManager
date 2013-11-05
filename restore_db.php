@@ -1,6 +1,27 @@
 <?php
 ini_set('memory_limit', '5120M');
 set_time_limit ( 0 );
+error_reporting(0);
+define('WP_USE_THEMES', false);
+global $wp, $wp_query, $wp_the_query, $wp_rewrite, $wp_did_header;
+function bm_get_wproot()
+{
+   $base = dirname(__FILE__);
+      $path = false;
+   if(@file_exists(dirname(dirname($base))."/wp-load.php"))
+        $path = dirname(dirname($base));
+      else
+       if (@file_exists(dirname(dirname(dirname($base)))."/wp-load.php"))
+           $path = dirname(dirname(dirname($base)));
+       else
+            $path = false;
+
+    if ($path != false)
+        $path = str_replace("\\", "/", $path);
+    return $path;
+}
+require(bm_get_wproot() . '/wp-load.php');
+
 include 'config.php';
 /***************************************************************************
 *                             sql_parse.php
@@ -193,7 +214,10 @@ function split_sql_file($sql, $delimiter)
 }
 
 if(file_exists(ROOT_DIR.'/database/status.ini')) //Restore in progress, don't do anything or break everything
+{
+   bm_mail_notif('Backup failed ! Error:alreadyrestore');
    exit(json_encode(array('return'=>'alreadyrestore')));
+}
 
 if(isset($_GET['file']) && !empty($_GET['file'])) {
 
@@ -216,9 +240,13 @@ if(isset($_GET['file']) && !empty($_GET['file'])) {
       fwrite($handle,$percent);
       fclose($handle);
    }
+   bm_mail_notif('Backup terminated !');
    echo json_encode(array('return'=>'ok'));
 }
 else
+{
+   bm_mail_notif('Backup failed ! Error: nofile');
    echo json_encode(array('return'=>'nofile'));
+}
 
 ?>

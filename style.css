@@ -180,9 +180,10 @@
 }
 .right-settings {
 	float:left;
-	width:75%;
+	width:74%;
 	padding-bottom:10px;
 	padding-top:10px;
+	padding-left:10px; 
 }
 .right-settings input {
 	margin-left: 10px;
@@ -228,6 +229,4 @@ padding: 2px;
 font-weight: bold;
 color: red;
 }
-
-
 
