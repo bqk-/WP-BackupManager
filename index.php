@@ -525,7 +525,7 @@ class BackupManager
 		{
 			echo '<p>
 			'.ucfirst($this->name).' is available.<br />
-			<a onclick="updateBackupManager();">Click here to update</a>
+			<a onclick="updateBackupManager();" id="updateButton">Click here to update</a>
 			</p>';
 			?>
 			<script type="text/javascript" >
@@ -543,6 +543,7 @@ class BackupManager
 						dataType: 'html',
 						success: function(response) {
 							jQuery('#update_container').after('<p>'+response+'</p>');
+							jQuery('#updateButton').click(function() {return false;});
 						}
 					});
 					
