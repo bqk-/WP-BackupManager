@@ -23,28 +23,16 @@ function bm_get_wproot()
 require(bm_get_wproot() . '/wp-load.php');
 
 
-function plop($dir) {
-   if (is_dir($dir)) {
-     $objects = scandir($dir);
-     foreach ($objects as $object) {
-       if ($object != "." && $object != "..") {
-         if (filetype($dir."/".$object) == "dir") plop($dir."/".$object); else unlink($dir."/".$object);
-       }
-     }
-     reset($objects);
-     rmdir($dir);
-   }
- }
-
 function emptydir($dir) {
    if (is_dir($dir)) {
      $objects = scandir($dir);
      foreach ($objects as $object) {
        if ($object != "." && $object != ".." && $object != 'backups' && $object != 'database') {
-         if (filetype($dir."/".$object) == "dir") plop($dir."/".$object); else unlink($dir."/".$object);
+         if (filetype($dir."/".$object) == "dir") emptydir($dir."/".$object); else unlink($dir."/".$object);
        }
      }
      reset($objects);
+     @rmdir($dir);
    }
  }
  

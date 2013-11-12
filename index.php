@@ -9,6 +9,8 @@
  * License: No License
  */
 define('TIME_FACTOR',2);
+define('UPDATE_URL','http://75.103.83.155/backupmanager/');
+
 require_once(dirname(__FILE__).'/monitor.class.php');
 error_reporting(E_ALL);
 date_default_timezone_set ('America/New_York');
@@ -17,16 +19,24 @@ set_time_limit(0);
 $backupManager=new BackupManager();
 class BackupManager 
 {
+	protected $update  = 0,
+			  $version = 1.0,
+			  $name    = 'backup-manager-v1.0.zip';
+
 	public function __construct(){
 		add_action( 'admin_enqueue_scripts', array($this,'bm_init'));
 		add_action( 'admin_menu', array($this,'bm_register_menu_page'));
+		add_action('wp_ajax_doUpdate', array($this,'doUpdate_callback'));
 		if($this->notReady())
 		{
 			$this->bm_check_requirements();
 			if(!$this->bm_get_wproot())
 				die('Unable to locate wp-config.php file, create a config file, look at config-sample.php in the plugin directory.');
 			$f=fopen(dirname(__FILE__).'/config.php','w+');
-			fwrite($f,'<?php /*Auto generated config*/ define(\'ROOT_DIR\',\''.$this->bm_get_wproot().'\'); include ROOT_DIR.\'/wp-config.php\'; ?>');
+			fwrite($f,'<?php'.PHP_EOL.'
+						/* Backup Manager Config File */'.PHP_EOL.'
+						define(\'ROOT_DIR\',\''.$this->bm_get_wproot().'\');'.PHP_EOL.'
+						include ROOT_DIR.\'/wp-config.php\';'.PHP_EOL);
 			fclose($f);
 		}
 		if(!get_option('bm_path') && empty($_POST['path'])) {
@@ -38,7 +48,7 @@ class BackupManager
 			define('ROOT_DIR', get_option('bm_path'));
 		}
 		add_action('core_upgrade_preamble', array($this,'bm_main'));
-
+		$this->checkUpdate();
 		$this->cleanFolders();
 	}
 	private function bm_get_wproot()
@@ -71,6 +81,7 @@ class BackupManager
 	    add_menu_page( "Backup Manager", "Backup Manager", "add_users", "backup-manager", array($this,"bm_manage_submenu"), plugins_url( "backup-manager/backup.png" ) );
 	    add_submenu_page("backup-manager", "Backup Manager", "Manage", "add_users", "backup-manager", array($this,"bm_manage_submenu"));
 	    add_submenu_page("backup-manager", "Backup Manager Settings", "Settings", "add_users", "backup-manager-settings", array($this,"bm_settings_submenu"));
+		add_submenu_page("backup-manager", 'Backup Manager Update','Update <span class="update-plugins count-'.($this->update>0?'1':'0').'"><span class="plugin-count">'.($this->update>0?'1':'0').'</span></span>','add_users','backup-manager-update',array($this,"bm_update_submenu"));
 	}
 
 	public function bm_init() {
@@ -506,16 +517,52 @@ class BackupManager
 	    	echo '</fieldset>';
 	    echo '</div>';
 	}
-
+	public function bm_update_submenu() 
+	{	
+		echo '<div class="wrap">';
+		echo '<h2>Update Backup Manager</h2>';
+		if($this->update>0)
+		{
+			echo '<p>
+			'.ucfirst($this->name).' is available.<br />
+			<a onclick="updateBackupManager();">Click here to update</a>
+			</p>';
+			?>
+			<script type="text/javascript" >
+				function updateBackupManager()
+				{
+					var data = {
+						action: 'doUpdate'
+					};
+					jQuery.ajax({
+						url: ajaxurl,
+						type: 'POST',
+						data: {
+						action: 'doUpdate'
+						},
+						dataType: 'html',
+						success: function(response) {
+							jQuery('#update_container').after('<p>'+response+'</p>');
+						}
+					});
+					
+				}
+			</script>
+			<?php
+			echo '<pre><div id="update_container"></div></pre>';
+		}
+		else
+			echo '<p>No update available..</p>';
+		echo '</div>';
+	}
 	private function cleanFolders()
 	{
 		$i=1;
 		$max=get_option('bm_nb_db');
-		if($max>0)
-		{
-			$dir=ROOT_DIR.'/database/';
-		    $ffs = @scandir($dir,-1); 
-		    if($ffs)
+		$dir=ROOT_DIR.'/database/';
+	    $ffs = @scandir($dir,-1); 
+	    if($ffs)
+	    	if($max>0)
 		    foreach($ffs as $ff) { 
 		        if($ff != '.' && $ff != '..') { 
 		        	if(!is_dir($dir.'/'.$ff) && substr($dir.'/'.$ff,-3)=='sql')
@@ -526,25 +573,76 @@ class BackupManager
 		        	}
 		        }
 		    }
-		}
 		$i=1;
 		$max=get_option('bm_nb_files');
-		if($max>0)
-		{
-			$dir=ROOT_DIR.'/backups/';
-		    $ffs = @scandir($dir,-1); 
-		    if($ffs)
+		$dir=ROOT_DIR.'/backups/';
+	    $ffs = @scandir($dir,-1); 
+	    if($ffs)
+	    	if($max>0)
 		    foreach($ffs as $ff) { 
 		        if($ff != '.' && $ff != '..') { 
 		        	if(!is_dir($dir.'/'.$ff) && substr($dir.'/'.$ff,-3)=='zip')
 		        	{
-		        		if($i>$max)
+		        		if($i>$max && $max>0)
 		        			@unlink($dir.'/'.$ff);
 		        		$i++;
 		        	}
 		        }
 		    }
+	}
+
+	private function checkUpdate()
+	{
+		$tab=@file_get_contents(UPDATE_URL.'version.php');
+		$tab=array_map('trim',explode('|',$tab));
+		$new_version=$tab[0];
+		$new_name=$tab[1];
+		if($this->version<$new_version)
+		{
+			$this->update=$new_version;
+			$this->name=$new_name;
 		}
+	}
+
+
+	private function plop($dir) {
+	   if (is_dir($dir)) {
+	     $objects = scandir($dir);
+	     foreach ($objects as $object) {
+	       if ($object != "." && $object != ".." && $object != 'backups' && $object != 'database') {
+	         if (filetype($dir."/".$object) == "dir") $this->plop($dir."/".$object); else if($object!='config.php') unlink($dir."/".$object);
+	       }
+	     }
+	     reset($objects);
+	   }
+	 }
+
+	public function doUpdate_callback()
+	{
+		ignore_user_abort();
+		$return='<script type="text/javascript">jQuery("#update_container").html("Downloading the new files...<br /><br />");</script>';
+		$updateDir=__DIR__;
+		//$this->emptydir($updateDir);
+		$zip_content=@file_get_contents(UPDATE_URL.$this->name);
+		$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"Files downloaded, creating archive...<br /><br />");</script>';
+		$f=fopen('tempzip.zip','w+');
+		fwrite($f,$zip_content);
+		fclose($f);
+		$zip=new ZipArchive;
+		$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"Opening archive...<br /><br />");</script>';
+		if($zip->open('tempzip.zip'))
+		{
+			$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"Extracting archive...<br /><br />");</script>';
+			//$zip->extractTo('../'.$updateDir);
+			$zip->close();
+			//@unlink('tempzip.zip');
+			$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"Backup Manager has been updated !");</script>';
+		}
+		else
+		{
+			$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"An error occured, downloaded file might be corrupted.");</script>';
+		}
+		exit($return.'<br />Aye Sir !');
 	}
 }
 class SaneDb
@@ -557,6 +655,11 @@ class SaneDb
     }
     public function getDbName() { return $this->_oDb->dbname;     }
 }
+function __get($a)
+{
+	return $this->$a;
+}
+
 function bm_backupdb($filename) {
 	$dsn = 'mysql:dbname='.DB_NAME.';host='.DB_HOST;
 	$db = new PDO($dsn, DB_USER, DB_PASSWORD);
@@ -661,6 +764,7 @@ function bm_cron_backup($type=3) {
 		break;
 	}
 }
+
 
 function bm_mail_notif($msg)
 {
