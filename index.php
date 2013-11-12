@@ -20,8 +20,8 @@ $backupManager=new BackupManager();
 class BackupManager 
 {
 	protected $update  = 0,
-			  $version = 1.0,
-			  $name    = 'backup-manager-v1.0.zip';
+			  $version = 1.5,
+			  $name    = 'backup-manager-v1.5.zip';
 
 	public function __construct(){
 		add_action( 'admin_enqueue_scripts', array($this,'bm_init'));
@@ -622,20 +622,22 @@ class BackupManager
 		ignore_user_abort();
 		$return='<script type="text/javascript">jQuery("#update_container").html("Downloading the new files...<br /><br />");</script>';
 		$updateDir=__DIR__;
-		//$this->emptydir($updateDir);
+		$this->plop($updateDir);
 		$zip_content=@file_get_contents(UPDATE_URL.$this->name);
 		$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"Files downloaded, creating archive...<br /><br />");</script>';
-		$f=fopen('tempzip.zip','w+');
+		
+		$f=fopen(__DIR__.'/tempzip.zip','w+');
 		fwrite($f,$zip_content);
 		fclose($f);
+
 		$zip=new ZipArchive;
 		$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"Opening archive...<br /><br />");</script>';
-		if($zip->open('tempzip.zip'))
+		if($zip->open(__DIR__.'/tempzip.zip'))
 		{
 			$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"Extracting archive...<br /><br />");</script>';
-			//$zip->extractTo('../'.$updateDir);
+			$zip->extractTo(__DIR__.'/..');
 			$zip->close();
-			//@unlink('tempzip.zip');
+			@unlink(__DIR__.'/tempzip.zip');
 			$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"Backup Manager has been updated !");</script>';
 		}
 		else
@@ -654,10 +656,6 @@ class SaneDb
         $this->_oDb = $oDb;
     }
     public function getDbName() { return $this->_oDb->dbname;     }
-}
-function __get($a)
-{
-	return $this->$a;
 }
 
 function bm_backupdb($filename) {
