@@ -2,8 +2,6 @@
 ini_set('memory_limit', '5120M');
 set_time_limit ( 0 );
 error_reporting(0);
-define('WP_USE_THEMES', false);
-global $wp, $wp_query, $wp_the_query, $wp_rewrite, $wp_did_header;
 function bm_get_wproot()
 {
    $base = dirname(__FILE__);
@@ -21,8 +19,10 @@ function bm_get_wproot()
     return $path;
 }
 require(bm_get_wproot() . '/wp-load.php');
+define('ROOT_DIR',get_option('bm_path')); 
+define('WP_USE_THEMES', false);
+global $wp, $wp_query, $wp_the_query, $wp_rewrite, $wp_did_header;
 
-include 'config.php';
 /***************************************************************************
 *                             sql_parse.php
 *                              -------------------

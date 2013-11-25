@@ -3,20 +3,17 @@
  * Plugin Name: Backup Manager
  * Plugin URI: http://www.google.com/
  * Description: Manage backup and restore wordpress
- * Version: 1.0
+ * Version: 1.5
  * Author: Thibault Miclo
  * Author URI: http://75.103.83.152/~thibault/
  * License: No License
  */
 define('TIME_FACTOR',2);
 define('UPDATE_URL','http://75.103.83.155/backupmanager/');
-
 require_once(dirname(__FILE__).'/monitor.class.php');
 error_reporting(E_ALL);
 date_default_timezone_set ('America/New_York');
 set_time_limit(0);
-
-$backupManager=new BackupManager();
 class BackupManager 
 {
 	protected $update  = 0,
@@ -27,19 +24,8 @@ class BackupManager
 		add_action( 'admin_enqueue_scripts', array($this,'bm_init'));
 		add_action( 'admin_menu', array($this,'bm_register_menu_page'));
 		add_action('wp_ajax_doUpdate', array($this,'doUpdate_callback'));
-		if($this->notReady())
-		{
-			$this->bm_check_requirements();
-			if(!$this->bm_get_wproot())
-				die('Unable to locate wp-config.php file, create a config file, look at config-sample.php in the plugin directory.');
-			$f=fopen(dirname(__FILE__).'/config.php','w+');
-			fwrite($f,'<?php'.PHP_EOL.'
-						/* Backup Manager Config File */'.PHP_EOL.'
-						define(\'ROOT_DIR\',\''.$this->bm_get_wproot().'\');'.PHP_EOL.'
-						include ROOT_DIR.\'/wp-config.php\';'.PHP_EOL);
-			fclose($f);
-		}
 		if(!get_option('bm_path') && empty($_POST['path'])) {
+			$this->bm_check_requirements();
 			define('ROOT_DIR', $this->bm_get_wproot());
 			add_action('admin_notices',array($this,'bm_config_file_missing') );
 		}
@@ -66,13 +52,6 @@ class BackupManager
 	    if ($path != false)
 	        $path = str_replace("\\", "/", $path);
 	    return $path;
-	}
-	private function notReady()
-	{
-		if(!file_exists(dirname(__FILE__).'/config.php'))
-			return true;
-		else
-			return false;
 	}
 	public function bm_config_file_missing() {
 		echo '<div class="nice_box"><div class="close" onclick="close_parent_box(this);">X</div>Backup manager plugin isn\'t configured and could not work as expected, please configure it on the <a href="admin.php?page=backup-manager-settings">settings page</a>.</div>';
@@ -763,8 +742,6 @@ function bm_cron_backup($type=3) {
 		break;
 	}
 }
-
-
 function bm_mail_notif($msg)
 {
 	$headers = 'From: miclo.thibault@gmail.com' . "\r\n" .
@@ -775,9 +752,9 @@ function bm_mail_notif($msg)
 	else if(get_option('bm_email_config') == 2)
 		wp_mail(get_option('admin_email'),'BackupManager Notification',$msg,$headers);
 }
-
 function bm_ajax_cron($time,$reccurence,$type)
 {
 	wp_schedule_event( $time, $reccurence,  'bm_do_backup', array($type));
 }
 add_action('bm_do_backup', 'bm_cron_backup',10,1);
+$backupManager=new BackupManager();

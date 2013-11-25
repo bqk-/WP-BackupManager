@@ -9,4 +9,3 @@
 define('ROOT_DIR','C:/xampp/htdocs/mywebsite'); 
 //include the wp-config file to obtain db info
 include ROOT_DIR.'/wp-config.php';
-?>

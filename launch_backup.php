@@ -1,9 +1,4 @@
 <?php
-
-include 'config.php';
-//include 'monitor.class.php';
-define('WP_USE_THEMES', false);
-global $wp, $wp_query, $wp_the_query, $wp_rewrite, $wp_did_header;
 function bm_get_wproot()
 {
 	$base = dirname(__FILE__);
@@ -21,6 +16,10 @@ function bm_get_wproot()
     return $path;
 }
 require(bm_get_wproot() . '/wp-load.php');
+define('ROOT_DIR',get_option('bm_path')); 
+define('WP_USE_THEMES', false);
+global $wp, $wp_query, $wp_the_query, $wp_rewrite, $wp_did_header;
+
 error_reporting(0);
 set_time_limit(0);
 function notAlreadyInBackup() {
@@ -239,5 +238,3 @@ else
 	bm_mail_notif('Backup failed ! Error: alreadybackup');
 	echo json_encode(array('return'=>'alreadybackup'));
 }
-
-?>

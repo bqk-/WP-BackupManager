@@ -326,7 +326,6 @@ function bm_refresh_percent_db(){
 	{
 	  	if(xmlhttp.readyState==4 && xmlhttp.status==200)
 	    {
-	    	//alert(xmlhttp.responseText);
 	    	done=parseInt(xmlhttp.responseText);
 	    	if(done==100)
 	    		clearInterval(timer);
@@ -350,14 +349,8 @@ function bm_delete(file,e) {
 	  	if(xmlhttp.readyState==4 && xmlhttp.status==200)
 	    {
 	    	var resp=xmlhttp.responseText;
-	    	if(resp=='error')
-	    		alert('Data error.');
-	    	else if(resp=='success') {
-	    		var f=e.parentNode.parentNode;
-	    		f.parentNode.removeChild(f);
-	    	}
-	    	else
-	    		alert('Error : '+resp);
+    		var f=e.parentNode.parentNode;
+    		f.parentNode.removeChild(f);
 	    }
 	};
 }

@@ -17,5 +17,22 @@ WFC - http://www.webfullcircle.com/
 
 ============== CHANGELOG ==============
 
+* v1.5
+- Update from WFC server
+- No more config file
+
+* v1.4
+- Mail notifications
+- Better compatibility with outdated PHP version
+
+* v1.3
+- Cron
+
+* v1.2
+- More options
+
+* v1.1
+- Bugs fixes
+
 * v1.0
 - Initial release

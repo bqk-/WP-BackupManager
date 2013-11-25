@@ -1,9 +1,5 @@
 <?php
 error_reporting(0);
-include 'config.php';
-set_time_limit(0);
-define('WP_USE_THEMES', false);
-global $wp, $wp_query, $wp_the_query, $wp_rewrite, $wp_did_header;
 function bm_get_wproot()
 {
     $base = dirname(__FILE__);
@@ -21,7 +17,9 @@ function bm_get_wproot()
     return $path;
 }
 require(bm_get_wproot() . '/wp-load.php');
-
+define('ROOT_DIR',get_option('bm_path')); 
+define('WP_USE_THEMES', false);
+global $wp, $wp_query, $wp_the_query, $wp_rewrite, $wp_did_header;
 
 function emptydir($dir) {
    if (is_dir($dir)) {
@@ -41,7 +39,7 @@ function emptydir($dir) {
  
 if(file_exists(ROOT_DIR.'/backups/status.ini')) //Restore in progress, don't do anything or break everything
 {
-    bm_mail_notif('Backup failed ! Error: alreadyrestore');
+    bm_mail_notif('Restore failed ! Error: alreadyrestore');
 	exit(json_encode(array('return'=>'alreadyrestore')));
 }
 
@@ -66,19 +64,17 @@ if(isset($_GET['file']) && !empty($_GET['file'])) {
 		fwrite($handle,100);
 		fclose($handle);
 		//unlink(ROOT_DIR.'/backups/status.ini');
-        bm_mail_notif('Backup terminated !');
+        bm_mail_notif('Restore terminated !');
 		echo json_encode(array('return'=>'ok'));
 	}
 	else
     {
-        bm_mail_notif('Backup failed ! Error: nozip');
+        bm_mail_notif('Restore failed ! Error: nozip');
 		echo json_encode(array('return'=>'nozip'));
     }
 }
 else
 {
-    bm_mail_notif('Backup failed ! Error: nofile');
+    bm_mail_notif('Restore failed ! Error: nofile');
 	echo json_encode(array('return'=>'nofile'));
 }
-
-?>
