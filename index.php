@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Backup Manager
- * Plugin URI: http://www.google.com/
+ * Plugin URI: http://75.103.83.152/~thibault/
  * Description: Manage backup and restore wordpress
  * Version: 1.5
  * Author: Thibault Miclo
