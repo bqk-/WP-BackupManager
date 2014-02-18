@@ -1,32 +1,31 @@
 <?php
 /**
  * Plugin Name: Backup Manager
- * Plugin URI: http://www.google.com/
+ * Plugin URI: http://75.103.83.152/~thibault/
  * Description: Manage backup and restore wordpress
- * Version: 1.0
+ * Version: 1.5
  * Author: Thibault Miclo
  * Author URI: http://75.103.83.152/~thibault/
  * License: No License
  */
 define('TIME_FACTOR',2);
+define('UPDATE_URL','http://75.103.83.155/backupmanager/');
 require_once(dirname(__FILE__).'/monitor.class.php');
 error_reporting(E_ALL);
-$backupManager=new BackupManager();
+date_default_timezone_set ('America/New_York');
+set_time_limit(0);
 class BackupManager 
 {
+	protected $update  = 0,
+			  $version = 1.5,
+			  $name    = 'backup-manager-v1.5.zip';
+
 	public function __construct(){
 		add_action( 'admin_enqueue_scripts', array($this,'bm_init'));
 		add_action( 'admin_menu', array($this,'bm_register_menu_page'));
-		if($this->notReady())
-		{
-			$this->bm_check_requirements();
-			if(!$this->bm_get_wproot())
-				die('Unable to locate wp-config.php file, create a config file, look at config-sample.php in the plugin directory.');
-			$f=fopen(dirname(__FILE__).'/config.php','w+');
-			fwrite($f,'<?php /*Auto generated config*/ define(\'ROOT_DIR\',\''.$this->bm_get_wproot().'\'); include ROOT_DIR.\'/wp-config.php\'; ?>');
-			fclose($f);
-		}
+		add_action('wp_ajax_doUpdate', array($this,'doUpdate_callback'));
 		if(!get_option('bm_path') && empty($_POST['path'])) {
+			$this->bm_check_requirements();
 			define('ROOT_DIR', $this->bm_get_wproot());
 			add_action('admin_notices',array($this,'bm_config_file_missing') );
 		}
@@ -35,6 +34,8 @@ class BackupManager
 			define('ROOT_DIR', get_option('bm_path'));
 		}
 		add_action('core_upgrade_preamble', array($this,'bm_main'));
+		$this->checkUpdate();
+		$this->cleanFolders();
 	}
 	private function bm_get_wproot()
 	{
@@ -52,13 +53,6 @@ class BackupManager
 	        $path = str_replace("\\", "/", $path);
 	    return $path;
 	}
-	private function notReady()
-	{
-		if(!file_exists(dirname(__FILE__).'/config.php'))
-			return true;
-		else
-			return false;
-	}
 	public function bm_config_file_missing() {
 		echo '<div class="nice_box"><div class="close" onclick="close_parent_box(this);">X</div>Backup manager plugin isn\'t configured and could not work as expected, please configure it on the <a href="admin.php?page=backup-manager-settings">settings page</a>.</div>';
 	}	
@@ -66,6 +60,7 @@ class BackupManager
 	    add_menu_page( "Backup Manager", "Backup Manager", "add_users", "backup-manager", array($this,"bm_manage_submenu"), plugins_url( "backup-manager/backup.png" ) );
 	    add_submenu_page("backup-manager", "Backup Manager", "Manage", "add_users", "backup-manager", array($this,"bm_manage_submenu"));
 	    add_submenu_page("backup-manager", "Backup Manager Settings", "Settings", "add_users", "backup-manager-settings", array($this,"bm_settings_submenu"));
+		add_submenu_page("backup-manager", 'Backup Manager Update','Update <span class="update-plugins count-'.($this->update>0?'1':'0').'"><span class="plugin-count">'.($this->update>0?'1':'0').'</span></span>','add_users','backup-manager-update',array($this,"bm_update_submenu"));
 	}
 
 	public function bm_init() {
@@ -73,7 +68,6 @@ class BackupManager
 		wp_enqueue_style( "stylesheet", $plugin_url.'/style.css');
 		wp_enqueue_style( "stylesheet", $plugin_url.'/button.css');
 		wp_enqueue_script( "script", $plugin_url.'/script.js');
-		wp_enqueue_script( "script", $plugin_url.'/basiccalendar.js');
 
 		add_filter( 'cron_schedules', array($this,'bm_cron_add'));
 	}
@@ -251,7 +245,7 @@ class BackupManager
 	    foreach($ffs as $ff) { 
 	        if($ff != '.' && $ff != '..') { 
 	        	$nothing=false;
-	        	if(!is_dir($dir.'/'.$ff) && substr($dir.'/'.$ff,-3)=='zip') 
+	        	if(!is_dir($dir.'/'.$ff) && substr($dir.'/'.$ff,-3)=='zip')  
 	                $output.= '<tr>
 	            				<td style="width:50%">'.$this->backupName(trim($dir.'/'.$ff,'./')).'</td>
 	            				<td style="font-weight:bold;text-align:right;">'.Monitor::HumanSize(filesize(trim($dir.$ff,'./'))).'</td>
@@ -310,24 +304,6 @@ class BackupManager
 		@unlink(ROOT_DIR.'/backups/status.ini');
 	}
 
-	private function bm_add_cron_backup($start,$recurrence,$type) {
-		$sche=wp_get_schedules();
-		if(in_array($type,$sche))
-			switch($type){
-				case 1:
-					wp_schedule_event($start,$recurrence,'bm_launch_db');
-				break;
-				case 2:
-					wp_schedule_event($start,$recurrence,'bm_launch_files');
-				break;
-				case 3:
-					wp_schedule_event($start,$recurrence,'bm_cron_backup');
-				break;
-				default:
-				break;
-			}
-	}
-
 	public function bm_manage_submenu() {
 	        $this->cleanStatus();
 	        $monitor=$this->bm_evaluate();
@@ -355,7 +331,7 @@ class BackupManager
 					$error.='Invalid path...<br />';
 			}
 
-			if(!empty($_POST['email'])) {
+			if(isset($_POST['email'])) {
 				$nb=intval($_POST['email']);
 				if($nb===2)
 					update_option('bm_email_config',2);
@@ -374,11 +350,16 @@ class BackupManager
 				else
 					update_option('bm_email_config',0);
 			}
-
+			update_option('bm_nb_files',intval($_POST['bm_nb_files']));
+			update_option('bm_nb_db',intval($_POST['bm_nb_db']));
 			if($error)
 				echo '<div class="nice_box redbg"><div class="close" onclick="close_parent_box(this);">X</div>'.$error.'</div>';
 			
- 			}
+ 		}
+ 		else if(isset($_POST['cron_type'])&&!empty($_POST['cron_type']))
+ 		{
+ 			bm_ajax_cron(mktime($_POST['cron_hour'],$_POST['cron_minute'],$_POST['cron_second'],$_POST['cron_month'],$_POST['cron_day'],$_POST['cron_year']),$_POST['cron_recur'],intval($_POST['cron_type']));
+ 		}
  		$path=get_option('bm_path');
  		if(!$path)
  			$path=ROOT_DIR;
@@ -387,6 +368,8 @@ class BackupManager
  		if(!$custom_emails)
  			$custom_emails='custom@mail.com,custom2@mail.fr,...';
  		$email_config=intval(get_option('bm_email_config'));
+ 		$nb_files=intval(get_option('bm_nb_files'));
+ 		$nb_db=intval(get_option('bm_nb_db'));
 		echo '<div class="wrap">';
 	    echo '<h2>Backup Manager Options</h2>';
 	    echo '<fieldset><legend>Settings</legend>';
@@ -400,9 +383,9 @@ class BackupManager
 		    			</div>
 		    		</div>
 	    		<hr />';
-	    	echo '<!--<div class="block-settings">
+	    	echo '<div class="block-settings">
 		    			<div class="left-settings">
-		    				Notify me when my backup is over
+		    				Notify me when my backup is over or an error occurs
 		    			</div>
 		    			<div class="right-settings">
 			    			<input type="radio" name="email" '.($email_config==2 ? 'checked="checked"':'').' value="2">
@@ -419,43 +402,230 @@ class BackupManager
 		    				Number of files to keep 
 		    			</div>
 		    			<div class="right-settings">
-		    				<input type="text" value="" name="nb_db" size="4" /> Database <br />
-		    				<input type="text" value="" name="nb_files" size="4" /> Files<br />
+		    				<input type="text" name="bm_nb_db" size="4" value="'.$nb_db.'" /> Database <br />
+		    				<input type="text" name="bm_nb_files" size="4" value="'.$nb_files.'" /> Files<br />
 		    			</div>
 		    		</div>
-		    		<div class="block-settings">
-		    			<div class="left-settings">
-		    				<a href="http://en.wikipedia.org/wiki/Cron" target="_blank">Cron</a> backups
-		    			</div>
-		    			<div class="right-settings">';
-		    	$cron='<select name="cron_type">
-		    				<option value="3">Both</option>
-		    				<option value="2">Database</option>
-		    				<option value="1">Files</option>
-		    			</select>
-		    			<select name="cron_recur">';
-		    	foreach($arr=wp_get_schedules() as $k=>$v)
-		    		echo '<option value="'.$k.'">'.$v['display'].'</option>';
-		    		echo '</select>';
-		    		echo 'First occurence (mm/dd/yyyy) <input type="text" name="cron_day" /><span id="cron_day"></span> <input type="text" name="cron_time" />
-		    			';
-		    		echo '<script type="text/javascript">
+		    		<hr />
+		    		<input type="submit" value="Update" class="button" style="display: block;text-align: center;margin:0 auto;" />
+	    			</form>
+		    	</fieldset>';
 
-							var todaydate=new Date()
-							var curmonth=todaydate.getMonth()+1 //get current month (1-12)
-							var curyear=todaydate.getFullYear() //get current year
-
-							document.getElementById(\'cron_day\').innerHTML=buildCal(curmonth ,curyear, "main", "month", "daysofweek", "days", 1);
-						</script>';
-					echo '</div>-->
-		    		</div>
-	    			<input type="submit" value="Update" />
-	    			</form>';
-	    	echo '';
-	    echo '</fieldset>';
+	    	echo '<fieldset><legend>Schedule a Cron</legend>
+	    		<div class="block-settings">
+	    			<div class="left-settings">
+	    				<a href="http://en.wikipedia.org/wiki/Cron" target="_blank">WP_Cron</a> backups<br />
+	    				(The action will trigger when someone visits your site, to use real cron use bm_cron.php, see comment in the file)
+	    			</div>
+	    			<div class="right-settings">';
+	    	echo '<form method="POST" action="">
+	    		<select name="cron_type">
+	    				<option value="3">Both</option>
+	    				<option value="2">Database</option>
+	    				<option value="1">Files</option>
+	    			</select>
+	    			Reccurrence : <select name="cron_recur">';
+	    		$schedules=wp_get_schedules();
+	    	foreach($schedules as $k=>$v)
+	    		echo '<option value="'.$k.'">'.$v['display'].'</option>';
+	    		echo '</select>';
+	    		echo '<span id="date_cron">';
+	    		$months = array(1=>"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "Novemeber", "December");
+	    		$d=date('j');
+	    		$m=date('m');
+	    		$y=date('Y');
+	    		$h=date('H');
+	    		$n=date('i');
+	    		$s=date('s');
+	    		echo 'First occurence ';
+	    		echo '<select id="select_month" name="cron_month">';
+	    		for($i=1;$i<=12;$i++)
+	    			echo '<option value="'.$i.'"'.($i==$m?' selected="selected"':'').'>'.$months[$i].'</option>';
+	    		echo '</select>';
+	    		echo '<select id="select_day" name="cron_day">';
+	    		for($i=1;$i<=31;$i++)
+	    			echo '<option value="'.$i.'"'.($i==$d?' selected="selected"':'').'>'.sprintf("%02d",$i).'</option>';
+	    		echo '</select>';
+	    		echo '<select id="select_year" name="cron_year">';
+	    		for($i=date('Y');$i<=date('Y')+10;$i++)
+	    			echo '<option value="'.$i.'"'.($i==$y?' selected="selected"':'').'>'.$i.'</option>';
+	    		echo '</select>';
+				echo '<select id="select_hour" name="cron_hour">';
+	    		for($i=0;$i<=23;$i++)
+	    			echo '<option value="'.$i.'"'.($i==$h?' selected="selected"':'').'>'.sprintf("%02d",$i).'</option>';
+	    		echo '</select>';
+	    		echo '<select id="select_minute" name="cron_minute">';
+	    		for($i=0;$i<=59;$i++)
+	    			echo '<option value="'.$i.'"'.($i==$n?' selected="selected"':'').'>'.sprintf("%02d",$i).'</option>';
+	    		echo '</select>';
+	    		echo '<select id="select_second" name="cron_second">';
+	    		for($i=0;$i<=59;$i++)
+	    			echo '<option value="'.$i.'"'.($i==$s?' selected="selected"':'').'>'.sprintf("%02d",$i).'</option>';
+	    		echo '</select>';
+	    		echo '</span>';
+	    		echo '<input type="submit" value="Schedule Backup" class="button" style="display:block;text-align:center;margin:0 auto;margin-top:15px;" /></form>';
+				echo '</div>
+	    		</div>
+    			';
+	    	echo '</fieldset>';
+	    	echo '<fieldset><legend>Scheduled Cron</legend>';
+	    	echo '<table>
+		    		<tr>
+		    			<th>Type</th>
+		    			<th>Reccurence</th>
+		    			<th>Next time</th>
+		    		</tr>';
+	    	foreach(get_option('cron') as $t=>$h)if(@is_array($h['bm_do_backup']))
+	    	{
+	    		foreach ($h['bm_do_backup'] as $v);
+	    		echo '<tr>
+		    			<td>'.
+		    			(
+		    			$v['args'][0]==1?
+			    			'Files':
+			    			($v['args'][0]==2?
+			    				'Database':
+		    					'Both'
+		    				)
+		    			).'</td>
+		    			<td>'.$schedules[$v['schedule']]['display'].'</td>
+		    			<td>'.date('l jS \of F Y h:i:s A',$t).'</td>
+		    		</tr>';
+	    	}
+	    	echo '</table>';
+	    	echo '</fieldset>';
 	    echo '</div>';
 	}
+	public function bm_update_submenu() 
+	{	
+		echo '<div class="wrap">';
+		echo '<h2>Update Backup Manager</h2>';
+		if($this->update>0)
+		{
+			echo '<p>
+			'.ucfirst($this->name).' is available.<br />
+			<a onclick="updateBackupManager();" id="updateButton">Click here to update</a>
+			</p>';
+			?>
+			<script type="text/javascript" >
+				function updateBackupManager()
+				{
+					var data = {
+						action: 'doUpdate'
+					};
+					jQuery.ajax({
+						url: ajaxurl,
+						type: 'POST',
+						data: {
+						action: 'doUpdate'
+						},
+						dataType: 'html',
+						success: function(response) {
+							jQuery('#update_container').after('<p>'+response+'</p>');
+							jQuery('#updateButton').click(function() {return false;});
+						}
+					});
+					
+				}
+			</script>
+			<?php
+			echo '<pre><div id="update_container"></div></pre>';
+		}
+		else
+			echo '<p>No update available..</p>';
+		echo '</div>';
+	}
+	private function cleanFolders()
+	{
+		$i=1;
+		$max=get_option('bm_nb_db');
+		$dir=ROOT_DIR.'/database/';
+	    $ffs = @scandir($dir,-1); 
+	    if($ffs)
+	    	if($max>0)
+		    foreach($ffs as $ff) { 
+		        if($ff != '.' && $ff != '..') { 
+		        	if(!is_dir($dir.'/'.$ff) && substr($dir.'/'.$ff,-3)=='sql')
+		        	{
+		        		if($i>$max)
+		        			@unlink($dir.'/'.$ff);
+		        		$i++;
+		        	}
+		        }
+		    }
+		$i=1;
+		$max=get_option('bm_nb_files');
+		$dir=ROOT_DIR.'/backups/';
+	    $ffs = @scandir($dir,-1); 
+	    if($ffs)
+	    	if($max>0)
+		    foreach($ffs as $ff) { 
+		        if($ff != '.' && $ff != '..') { 
+		        	if(!is_dir($dir.'/'.$ff) && substr($dir.'/'.$ff,-3)=='zip')
+		        	{
+		        		if($i>$max && $max>0)
+		        			@unlink($dir.'/'.$ff);
+		        		$i++;
+		        	}
+		        }
+		    }
+	}
 
+	private function checkUpdate()
+	{
+		$tab=@file_get_contents(UPDATE_URL.'version.php');
+		$tab=array_map('trim',explode('|',$tab));
+		$new_version=$tab[0];
+		$new_name=$tab[1];
+		if($this->version<$new_version)
+		{
+			$this->update=$new_version;
+			$this->name=$new_name;
+		}
+	}
+
+
+	private function plop($dir) {
+	   if (is_dir($dir)) {
+	     $objects = scandir($dir);
+	     foreach ($objects as $object) {
+	       if ($object != "." && $object != ".." && $object != 'backups' && $object != 'database') {
+	         if (filetype($dir."/".$object) == "dir") $this->plop($dir."/".$object); else if($object!='config.php') unlink($dir."/".$object);
+	       }
+	     }
+	     reset($objects);
+	   }
+	 }
+
+	public function doUpdate_callback()
+	{
+		ignore_user_abort();
+		$return='<script type="text/javascript">jQuery("#update_container").html("Downloading the new files...<br /><br />");</script>';
+		$updateDir=__DIR__;
+		$this->plop($updateDir);
+		$zip_content=@file_get_contents(UPDATE_URL.$this->name);
+		$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"Files downloaded, creating archive...<br /><br />");</script>';
+		
+		$f=fopen(__DIR__.'/tempzip.zip','w+');
+		fwrite($f,$zip_content);
+		fclose($f);
+
+		$zip=new ZipArchive;
+		$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"Opening archive...<br /><br />");</script>';
+		if($zip->open(__DIR__.'/tempzip.zip'))
+		{
+			$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"Extracting archive...<br /><br />");</script>';
+			$zip->extractTo(__DIR__.'/..');
+			$zip->close();
+			@unlink(__DIR__.'/tempzip.zip');
+			$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"Backup Manager has been updated !");</script>';
+		}
+		else
+		{
+			$return.='<script type="text/javascript">jQuery("#update_container").html(jQuery("#update_container").html()+"An error occured, downloaded file might be corrupted.");</script>';
+		}
+		exit($return.'<br />Aye Sir !');
+	}
 }
 class SaneDb
 {
@@ -467,6 +637,7 @@ class SaneDb
     }
     public function getDbName() { return $this->_oDb->dbname;     }
 }
+
 function bm_backupdb($filename) {
 	$dsn = 'mysql:dbname='.DB_NAME.';host='.DB_HOST;
 	$db = new PDO($dsn, DB_USER, DB_PASSWORD);
@@ -483,7 +654,7 @@ function bm_backupdb($filename) {
 	{
 		$result = $db->query('SELECT * FROM `'.$table.'`');
 		$num_fields = $result->columnCount();
-		$return.= 'DROP TABLE `'.$table.'`;';
+		$return.= 'DROP TABLE IF EXISTS `'.$table.'`;';
 		$row2 = $db->query('SHOW CREATE TABLE `'.$table.'`')->fetch(PDO::FETCH_NUM);
 		$return.= "\n\n".$row2[1].";\n\n";
 		
@@ -506,10 +677,16 @@ function bm_backupdb($filename) {
 	}
 
 	$handle = fopen($filename,'w+');
-	fwrite($handle,$return);
-	fclose($handle);
+	if($handle)
+	{
+		fwrite($handle,$return);
+		fclose($handle);
+	}
+	else
+		return false;
+	return true;
 }
-function bm_zipFolderFiles($path) { 
+function bm_zipFolderFiles($path,$zip) { 
 	$ffs = @scandir($path);
     foreach($ffs as $ff){ 
         if($ff != '.' && $ff != '..' && $ff != 'backups' && $ff != 'database') 
@@ -517,14 +694,8 @@ function bm_zipFolderFiles($path) {
             	$zip->addFile($path.'/'.$ff,substr($path.'/'.$ff,strlen(ROOT_DIR)+1));
 			}
             else
-            	zipFolderFiles($path.'/'.$ff,$zip);
+            	bm_zipFolderFiles($path.'/'.$ff,$zip);
     } 
-}
-function bm_launch_db(){
-	bm_cron_backup(2);
-}
-function bm_launch_files() {
-	bm_cron_backup(1);
 }
 function bm_cron_backup($type=3) {
 	switch($type){
@@ -533,49 +704,57 @@ function bm_cron_backup($type=3) {
 			$name='backup'.date('Y-m-d_H-i-s',time());
 			$res=$zip->open(ROOT_DIR.'/backups/'.$name.'.zip',ZipArchive::CREATE);
 			if($res) {
-				zipFolderFiles(ROOT_DIR,$zip);
+				bm_zipFolderFiles(ROOT_DIR,$zip);
 					if(!$zip->close())
-						bm_mail_error('Cron was not able to save the ZipArchive, no idea why.');
+						bm_mail_notif('Cron was not able to save the ZipArchive, no idea why.');
+					else
+						bm_mail_notif('Cron backup terminated !');
 			}
 			else
-				bm_mail_error('Cron was not able to create the ZipArchive, maybe a permissions issue.');
+				bm_mail_notif('Cron was not able to create the ZipArchive, maybe a permissions issue.');
 		break;
 		case 2:
-			if(!backup_databse(ROOT_DIR.'/database/'.$name.'.sql'))
-				bm_mail_error('Cron was not able to create the .sql file, maybe a permissions issue.');
+			if(!bm_backupdb(ROOT_DIR.'/database/'.$name.'.sql'))
+				bm_mail_notif('Cron was not able to create the .sql file, maybe a permissions issue.');
+			else
+				bm_mail_notif('Cron backup terminated !');
 		break;
 		case 3:
 			$zip=new ZipArchive;
 			$name='backup'.date('Y-m-d_H-i-s',time());
 			$res=$zip->open(ROOT_DIR.'/backups/'.$name.'.zip',ZipArchive::CREATE);
 			if($res) {
-				//echo json_encode(array('launchok'=>TRUE));
-				if(backup_databse(ROOT_DIR.'/database/'.$name.'.sql',$db_size)){
-					zipFolderFiles(ROOT_DIR,$zip);
+				if(bm_backupdb(ROOT_DIR.'/database/'.$name.'.sql')){
+					bm_zipFolderFiles(ROOT_DIR,$zip);
 					if(!$zip->close())
-						bm_mail_error('Cron was not able to save the ZipArchive, have you enough space on your disk ?');
+						bm_mail_notif('Cron was not able to save the ZipArchive, have you enough space on your disk ?');
+					else
+						bm_mail_notif('Cron backup terminated !');
 				}
 				else
-					bm_mail_error('Cron was not able to create the .sql file, maybe a permissions issue.');
+					bm_mail_notif('Cron was not able to create the .sql file, maybe a permissions issue.');
 			}
 			else
-				bm_mail_error('Cron was not able to create the ZipArchive, maybe a permissions issue.');
+				bm_mail_notif('Cron was not able to create the ZipArchive, maybe a permissions issue.');
 		break;
 
 		default:
 		break;
 	}
 }
-
-function bm_mail_error($msg)
+function bm_mail_notif($msg)
 {
 	$headers = 'From: miclo.thibault@gmail.com' . "\r\n" .
      'Reply-To: miclo.thibault@gmail.com' . "\r\n" .
      'X-Mailer: PHP/' . phpversion();
 	if(get_option('bm_email_config') == 1)
-		mail(get_option('bm_custom_emails'),'BackupManager Cron Error',$msg,$headers);
-	else
-		mail(get_option('admin_email'),'BackupManager Cron Error',$msg,$headers);
+		wp_mail(get_option('bm_custom_emails'),'BackupManager Notification',$msg,$headers);
+	else if(get_option('bm_email_config') == 2)
+		wp_mail(get_option('admin_email'),'BackupManager Notification',$msg,$headers);
 }
-
-?>
+function bm_ajax_cron($time,$reccurence,$type)
+{
+	wp_schedule_event( $time, $reccurence,  'bm_do_backup', array($type));
+}
+add_action('bm_do_backup', 'bm_cron_backup',10,1);
+$backupManager=new BackupManager();

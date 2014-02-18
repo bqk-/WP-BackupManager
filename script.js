@@ -326,7 +326,6 @@ function bm_refresh_percent_db(){
 	{
 	  	if(xmlhttp.readyState==4 && xmlhttp.status==200)
 	    {
-	    	//alert(xmlhttp.responseText);
 	    	done=parseInt(xmlhttp.responseText);
 	    	if(done==100)
 	    		clearInterval(timer);
@@ -350,14 +349,8 @@ function bm_delete(file,e) {
 	  	if(xmlhttp.readyState==4 && xmlhttp.status==200)
 	    {
 	    	var resp=xmlhttp.responseText;
-	    	if(resp=='error')
-	    		alert('Data error.');
-	    	else if(resp=='success') {
-	    		var f=e.parentNode.parentNode;
-	    		f.parentNode.removeChild(f);
-	    	}
-	    	else
-	    		alert('Error : '+resp);
+    		var f=e.parentNode.parentNode;
+    		f.parentNode.removeChild(f);
 	    }
 	};
 }
@@ -385,3 +378,48 @@ function close_parent_box(f) {
 	}
 	setTimeout(function(){e.style.opacity=0;e.parentNode.removeChild(e);},totalTime);
 }
+
+jQuery(window).load(function (){
+    jQuery('#select_month').change(function(){
+    	var a=parseInt(jQuery(this).val());
+        switch(a)
+        {
+	        case 2:
+	        	if(parseInt(jQuery('#select_year option:selected').val()) % 400 == 0 || (parseInt(jQuery('#select_year option:selected').val()) % 4 == 0 && parseInt(jQuery('#select_year option:selected').val()) % 100 != 0))
+	        		var end=29;
+	        	else
+	        		var end=28;
+
+       		var start=parseInt(jQuery('#select_day option:last-child').val());
+       		for (var i=start;i>end;i--)
+      			jQuery('#select_day option:last-child').remove();
+      		break;
+
+            case 4:
+            case 6:
+            case 10:
+           	case 11:
+				if(jQuery('#select_day option:last-child').text() != '30')
+	        	{
+	        		var start=parseInt(jQuery('#select_day option:last-child').val());
+	        		var end=30;
+	        		if(start> end)
+	        			jQuery('#select_day option:last-child').remove();
+	        		else
+	        			for (var i=start+1;i<=end;i++)
+	        				jQuery('#select_day').append('<option value="'+i+'">'+i+'</option>');
+	        	}
+            break; 
+
+            default:
+	        	if(jQuery('#select_day option:last-child').text() != '31')
+	        	{
+	        		var start=parseInt(jQuery('#select_day option:last-child').val());
+	        		for (var i=start+1;i<=31;i++)
+	        			jQuery('#select_day').append('<option value="'+i+'">'+i+'</option>');
+	        	}
+	        break;
+
+        }
+    });
+});

@@ -1,7 +1,26 @@
 <?php
+function bm_get_wproot()
+{
+	$base = dirname(__FILE__);
+		$path = false;
+	if(@file_exists(dirname(dirname($base))."/wp-load.php"))
+        $path = dirname(dirname($base));
+	   else
+	    if (@file_exists(dirname(dirname(dirname($base)))."/wp-load.php"))
+	        $path = dirname(dirname(dirname($base)));
+	    else
+	   		$path = false;
 
-include 'config.php';
-//include 'monitor.class.php';
+    if ($path != false)
+        $path = str_replace("\\", "/", $path);
+    return $path;
+}
+require(bm_get_wproot() . '/wp-load.php');
+define('ROOT_DIR',get_option('bm_path')); 
+define('WP_USE_THEMES', false);
+global $wp, $wp_query, $wp_the_query, $wp_rewrite, $wp_did_header;
+
+error_reporting(0);
 set_time_limit(0);
 function notAlreadyInBackup() {
 	$ffs = @scandir(ROOT_DIR.'/backups/');
@@ -111,7 +130,10 @@ if(notAlreadyInBackup())
 				if($res) {
 					$handle = fopen('status.ini','w+');
 			    	if(!$handle)
+			    	{
+			    		bm_mail_notif('Backup failed ! Error: noini');
 			    		echo json_encode(array('return'=>'noini'));
+			    	}
 			    	else {
 			    		fwrite($handle,0);
 						fclose($handle);
@@ -122,22 +144,32 @@ if(notAlreadyInBackup())
 							$handle = fopen('status.ini','w+');
 							fwrite($handle,100);
 							fclose($handle);
+							bm_mail_notif('Backup terminated !');
 							echo json_encode(array('return'=>'ok'));
 						}
 						else
+						{
+							bm_mail_notif('Backup failed ! Error: nodb');
 							echo json_encode(array('return'=>'nodb'));
+						}
 						
 			    	}		
 				}
 				else
+				{
+					bm_mail_notif('Backup failed ! Error: nozip');
 					echo json_encode(array('return'=>'nozip'));
+				}
 			}
 			else if(intval($_GET['who'])==2){
 				$end_size=$db_size;
 				$name='backup'.date('Y-m-d_H-i-s',time());
 				$handle = fopen('status.ini','w+');
 		    	if(!$handle)
+		    	{
+		    		bm_mail_notif('Backup failed ! Error: noini');
 		    		echo json_encode(array('return'=>'noini'));
+		    	}
 		    	else {
 		    		fwrite($handle,0);
 					fclose($handle);
@@ -146,10 +178,14 @@ if(notAlreadyInBackup())
 						$handle = fopen('status.ini','w+');
 						fwrite($handle,100);
 						fclose($handle);
+						bm_mail_notif('Backup terminated !');
 						echo json_encode(array('return'=>'ok','name'=>$name,'size'=>Monitor::HumanSize(filesize(ROOT_DIR.'/database/'.$name.'.sql')),'date'=>backupName2($name)));
 					}
 					else
+					{
+						bm_mail_notif('Backup failed ! Error: nodb');
 						echo json_encode(array('return'=>'nodb'));
+					}
 		    	}		
 			}
 			else {
@@ -170,21 +206,35 @@ if(notAlreadyInBackup())
 							$handle = fopen('status.ini','w+');
 							fwrite($handle,100);
 							fclose($handle);
+							bm_mail_notif('Backup terminated !');
 							echo json_encode(array('return'=>'ok','name'=>$name,'size'=>Monitor::HumanSize(filesize(ROOT_DIR.'/backups/'.$name.'.zip')),'date'=>backupName2($name)));
 						}
 						else
+						{
+							bm_mail_notif('Backup failed ! Error: nozip');
 							echo json_encode(array('return'=>'nozip'));
+						}
 			    	}		
 				}
 				else
+				{
+					bm_mail_notif('Backup failed ! Error: nozip');
 					echo json_encode(array('return'=>'nozip'));
+				}
 			}
 		else
+		{
+			bm_mail_notif('Backup failed ! Error: noget');
 			echo json_encode(array('return'=>'noget'));
+		}
 	}
 	else
+	{
+		bm_mail_notif('Backup failed ! Error: noget');
 		echo json_encode(array('return'=>'noget'));
+	}
 else
+{
+	bm_mail_notif('Backup failed ! Error: alreadybackup');
 	echo json_encode(array('return'=>'alreadybackup'));
-
-?>
+}

@@ -1,30 +1,36 @@
 <?php
 error_reporting(0);
-include 'config.php';
-set_time_limit(0);
+function bm_get_wproot()
+{
+    $base = dirname(__FILE__);
+        $path = false;
+    if(@file_exists(dirname(dirname($base))."/wp-load.php"))
+        $path = dirname(dirname($base));
+       else
+        if (@file_exists(dirname(dirname(dirname($base)))."/wp-load.php"))
+            $path = dirname(dirname(dirname($base)));
+        else
+            $path = false;
 
-function plop($dir) {
-   if (is_dir($dir)) {
-     $objects = scandir($dir);
-     foreach ($objects as $object) {
-       if ($object != "." && $object != "..") {
-         if (filetype($dir."/".$object) == "dir") plop($dir."/".$object); else unlink($dir."/".$object);
-       }
-     }
-     reset($objects);
-     rmdir($dir);
-   }
- }
+    if ($path != false)
+        $path = str_replace("\\", "/", $path);
+    return $path;
+}
+require(bm_get_wproot() . '/wp-load.php');
+define('ROOT_DIR',get_option('bm_path')); 
+define('WP_USE_THEMES', false);
+global $wp, $wp_query, $wp_the_query, $wp_rewrite, $wp_did_header;
 
 function emptydir($dir) {
    if (is_dir($dir)) {
      $objects = scandir($dir);
      foreach ($objects as $object) {
        if ($object != "." && $object != ".." && $object != 'backups' && $object != 'database') {
-         if (filetype($dir."/".$object) == "dir") plop($dir."/".$object); else unlink($dir."/".$object);
+         if (filetype($dir."/".$object) == "dir") emptydir($dir."/".$object); else unlink($dir."/".$object);
        }
      }
      reset($objects);
+     @rmdir($dir);
    }
  }
  
@@ -32,7 +38,10 @@ function emptydir($dir) {
  
  
 if(file_exists(ROOT_DIR.'/backups/status.ini')) //Restore in progress, don't do anything or break everything
+{
+    bm_mail_notif('Restore failed ! Error: alreadyrestore');
 	exit(json_encode(array('return'=>'alreadyrestore')));
+}
 
 if(isset($_GET['file']) && !empty($_GET['file'])) {
 	//only folder not affected, we will store progress in it
@@ -55,12 +64,17 @@ if(isset($_GET['file']) && !empty($_GET['file'])) {
 		fwrite($handle,100);
 		fclose($handle);
 		//unlink(ROOT_DIR.'/backups/status.ini');
+        bm_mail_notif('Restore terminated !');
 		echo json_encode(array('return'=>'ok'));
 	}
 	else
+    {
+        bm_mail_notif('Restore failed ! Error: nozip');
 		echo json_encode(array('return'=>'nozip'));
+    }
 }
 else
+{
+    bm_mail_notif('Restore failed ! Error: nofile');
 	echo json_encode(array('return'=>'nofile'));
-
-?>
+}
